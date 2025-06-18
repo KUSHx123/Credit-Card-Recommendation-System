@@ -138,7 +138,8 @@ CREATE POLICY "Anyone can read credit cards" ON credit_cards
 npm run dev
 ```
 
-The application will be available at `http://localhost:5173`
+The application will be available at `http://localhost:5173
+Deployed Link: https://credit-card-recommendation-system.vercel.app/`
 
 ## 🏗️ Project Structure
 
