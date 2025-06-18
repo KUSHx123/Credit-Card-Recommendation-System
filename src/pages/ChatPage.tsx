@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, MessageCircle, RefreshCw, Sparkles, AlertCircle } from 'lucide-react';
+import { Send, MessageCircle, RefreshCw, Sparkles, AlertCircle, Info } from 'lucide-react';
 import { Navigation } from '../components/Navigation';
 import { useAuth } from '../contexts/AuthContext';
 import { openaiAssistant } from '../lib/openai';
@@ -18,7 +18,7 @@ interface Message {
 }
 
 export const ChatPage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, isGuest } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -42,103 +42,114 @@ export const ChatPage: React.FC = () => {
 
   useEffect(() => {
     initializeChat();
-  }, [user]);
+  }, [user, isGuest]);
 
   const initializeChat = async () => {
-    if (!user) return;
+    if (!user && !isGuest) return;
 
     try {
       // Check if OpenAI is available
       const isOpenAIAvailable = openaiAssistant.isOpenAIAvailable();
       setOpenaiAvailable(isOpenAIAvailable);
 
-      // Check for existing active session
-      const { data: existingSession } = await supabase
-        .from('chat_sessions')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('status', 'active')
-        .maybeSingle();
+      // For guest users, skip database operations
+      if (isGuest) {
+        setTimeout(() => {
+          sendInitialGreeting();
+        }, 1000);
+        return;
+      }
 
-      let currentSessionId: string;
-
-      if (existingSession) {
-        currentSessionId = existingSession.id;
-        setSessionId(currentSessionId);
-        
-        // Load existing messages
-        const { data: existingMessages } = await supabase
-          .from('chat_messages')
-          .select('*')
-          .eq('session_id', currentSessionId)
-          .order('created_at', { ascending: true });
-
-        if (existingMessages && existingMessages.length > 0) {
-          const formattedMessages = existingMessages.map(msg => ({
-            id: msg.id,
-            role: msg.role as 'user' | 'assistant',
-            content: msg.content,
-            timestamp: new Date(msg.created_at)
-          }));
-          setMessages(formattedMessages);
-          
-          // Check if conversation was completed
-          const lastMessage = existingMessages[existingMessages.length - 1];
-          if (lastMessage.content.toLowerCase().includes('recommend') || 
-              lastMessage.content.toLowerCase().includes('based on your profile')) {
-            // Generate recommendations from existing conversation
-            setTimeout(() => {
-              generateRecommendationsFromConversation(formattedMessages);
-            }, 1000);
-          }
-        }
-
-        // Set up OpenAI assistant with existing thread if available
-        if (isOpenAIAvailable && existingSession.assistant_id) {
-          openaiAssistant.setAssistantId(existingSession.assistant_id);
-        }
-        if (isOpenAIAvailable && existingSession.thread_id) {
-          openaiAssistant.setThreadId(existingSession.thread_id);
-        }
-      } else {
-        // Create new session
-        const { data: newSession } = await supabase
+      // For authenticated users, handle database operations
+      if (user) {
+        // Check for existing active session
+        const { data: existingSession } = await supabase
           .from('chat_sessions')
-          .insert({
-            user_id: user.id,
-            status: 'active'
-          })
-          .select()
-          .single();
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .maybeSingle();
 
-        if (newSession) {
-          currentSessionId = newSession.id;
+        let currentSessionId: string;
+
+        if (existingSession) {
+          currentSessionId = existingSession.id;
           setSessionId(currentSessionId);
           
-          // Initialize OpenAI assistant if available
-          if (isOpenAIAvailable) {
-            try {
-              const assistantId = await openaiAssistant.createAssistant();
-              const threadId = await openaiAssistant.createThread();
+          // Load existing messages
+          const { data: existingMessages } = await supabase
+            .from('chat_messages')
+            .select('*')
+            .eq('session_id', currentSessionId)
+            .order('created_at', { ascending: true });
 
-              // Update session with OpenAI IDs
-              await supabase
-                .from('chat_sessions')
-                .update({
-                  assistant_id: assistantId,
-                  thread_id: threadId
-                })
-                .eq('id', currentSessionId);
-            } catch (error) {
-              console.warn('Failed to initialize OpenAI assistant:', error);
-              setOpenaiAvailable(false);
+          if (existingMessages && existingMessages.length > 0) {
+            const formattedMessages = existingMessages.map(msg => ({
+              id: msg.id,
+              role: msg.role as 'user' | 'assistant',
+              content: msg.content,
+              timestamp: new Date(msg.created_at)
+            }));
+            setMessages(formattedMessages);
+            
+            // Check if conversation was completed
+            const lastMessage = existingMessages[existingMessages.length - 1];
+            if (lastMessage.content.toLowerCase().includes('recommend') || 
+                lastMessage.content.toLowerCase().includes('based on your profile')) {
+              // Generate recommendations from existing conversation
+              setTimeout(() => {
+                generateRecommendationsFromConversation(formattedMessages);
+              }, 1000);
             }
           }
 
-          // Send initial greeting
-          setTimeout(() => {
-            sendInitialGreeting();
-          }, 1000);
+          // Set up OpenAI assistant with existing thread if available
+          if (isOpenAIAvailable && existingSession.assistant_id) {
+            openaiAssistant.setAssistantId(existingSession.assistant_id);
+          }
+          if (isOpenAIAvailable && existingSession.thread_id) {
+            openaiAssistant.setThreadId(existingSession.thread_id);
+          }
+        } else {
+          // Create new session
+          const { data: newSession } = await supabase
+            .from('chat_sessions')
+            .insert({
+              user_id: user.id,
+              status: 'active'
+            })
+            .select()
+            .single();
+
+          if (newSession) {
+            currentSessionId = newSession.id;
+            setSessionId(currentSessionId);
+            
+            // Initialize OpenAI assistant if available
+            if (isOpenAIAvailable) {
+              try {
+                const assistantId = await openaiAssistant.createAssistant();
+                const threadId = await openaiAssistant.createThread();
+
+                // Update session with OpenAI IDs
+                await supabase
+                  .from('chat_sessions')
+                  .update({
+                    assistant_id: assistantId,
+                    thread_id: threadId
+                  })
+                  .eq('id', currentSessionId);
+              } catch (error) {
+                console.warn('Failed to initialize OpenAI assistant:', error);
+                setOpenaiAvailable(false);
+              }
+            }
+
+            // Send initial greeting
+            setTimeout(() => {
+              sendInitialGreeting();
+            }, 1000);
+          }
         }
       }
     } catch (error) {
@@ -174,7 +185,8 @@ Let's start - what's your approximate monthly income? You can share a range if y
 
     setMessages([message]);
     
-    if (sessionId) {
+    // Only save to database if user is authenticated
+    if (sessionId && user) {
       await supabase
         .from('chat_messages')
         .insert({
@@ -187,7 +199,7 @@ Let's start - what's your approximate monthly income? You can share a range if y
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputValue.trim() || isTyping || !sessionId) return;
+    if (!inputValue.trim() || isTyping) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -201,18 +213,20 @@ Let's start - what's your approximate monthly income? You can share a range if y
     setIsTyping(true);
 
     try {
-      // Save user message to database
-      await supabase
-        .from('chat_messages')
-        .insert({
-          session_id: sessionId,
-          role: 'user',
-          content: userMessage.content
-        });
+      // Save user message to database only if authenticated
+      if (sessionId && user) {
+        await supabase
+          .from('chat_messages')
+          .insert({
+            session_id: sessionId,
+            role: 'user',
+            content: userMessage.content
+          });
+      }
 
       let response: string;
 
-      if (openaiAvailable) {
+      if (openaiAvailable && !isGuest) {
         try {
           // Send to OpenAI Assistant
           response = await openaiAssistant.sendMessage(userMessage.content);
@@ -236,14 +250,16 @@ Let's start - what's your approximate monthly income? You can share a range if y
 
       setMessages(prev => [...prev, assistantMessage]);
 
-      // Save assistant message to database
-      await supabase
-        .from('chat_messages')
-        .insert({
-          session_id: sessionId,
-          role: 'assistant',
-          content: response
-        });
+      // Save assistant message to database only if authenticated
+      if (sessionId && user) {
+        await supabase
+          .from('chat_messages')
+          .insert({
+            session_id: sessionId,
+            role: 'assistant',
+            content: response
+          });
+      }
 
       // Check if conversation is complete and should show recommendations
       if (response.toLowerCase().includes('ready to provide') || 
@@ -382,23 +398,25 @@ If you'd like, you can also tell me about any specific credit card features you'
         userProfile.creditScore = 700; // Default assumption
       }
 
-      // Save user profile to database
-      await supabase
-        .from('user_profiles')
-        .upsert({
-          user_id: user!.id,
-          monthly_income: userProfile.monthlyIncome,
-          spending_habits: userProfile.spendingHabits,
-          preferred_benefits: userProfile.preferredBenefits,
-          credit_score: userProfile.creditScore
-        });
+      // Save user profile to database only if authenticated
+      if (user) {
+        await supabase
+          .from('user_profiles')
+          .upsert({
+            user_id: user.id,
+            monthly_income: userProfile.monthlyIncome,
+            spending_habits: userProfile.spendingHabits,
+            preferred_benefits: userProfile.preferredBenefits,
+            credit_score: userProfile.creditScore
+          });
+      }
 
       const recs = recommendationEngine.generateRecommendations(userProfile);
       setRecommendations(recs);
       setShowRecommendations(true);
 
-      // Update session status
-      if (sessionId) {
+      // Update session status only if authenticated
+      if (sessionId && user) {
         await supabase
           .from('chat_sessions')
           .update({ status: 'completed' })
@@ -439,8 +457,8 @@ If you'd like, you can also tell me about any specific credit card features you'
 
   const handleNewChat = async () => {
     try {
-      // Mark current session as completed
-      if (sessionId) {
+      // Mark current session as completed only if authenticated
+      if (sessionId && user) {
         await supabase
           .from('chat_sessions')
           .update({ status: 'completed' })
@@ -485,6 +503,25 @@ If you'd like, you can also tell me about any specific credit card features you'
       <Navigation />
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Guest Mode Notice */}
+        {isGuest && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 bg-orange-50 border border-orange-200 rounded-xl p-4"
+          >
+            <div className="flex items-center gap-3">
+              <Info className="w-5 h-5 text-orange-600 flex-shrink-0" />
+              <div>
+                <p className="text-orange-800 font-medium">You're using Guest Mode</p>
+                <p className="text-orange-700 text-sm">
+                  You have full access to recommendations! Sign up to save your preferences and chat history for future visits.
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
         {!showRecommendations ? (
           /* Chat Interface */
           <div className="max-w-4xl mx-auto">

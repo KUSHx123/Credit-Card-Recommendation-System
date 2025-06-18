@@ -1,10 +1,10 @@
 import React from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { CreditCard, LogOut, MessageCircle, Home } from 'lucide-react';
+import { CreditCard, LogOut, MessageCircle, Home, User } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export const Navigation: React.FC = () => {
-  const { user, signOut } = useAuth();
+  const { user, isGuest, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -13,7 +13,8 @@ export const Navigation: React.FC = () => {
     navigate('/');
   };
 
-  if (!user) return null;
+  // Don't show navigation if neither authenticated nor guest
+  if (!user && !isGuest) return null;
 
   return (
     <nav className="bg-white/80 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-40">
@@ -46,15 +47,30 @@ export const Navigation: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600">
-              Welcome, {user.email}
-            </span>
+            {isGuest ? (
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2 bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-sm">
+                  <User className="w-4 h-4" />
+                  Guest Mode
+                </div>
+                <Link
+                  to="/"
+                  className="text-blue-600 hover:text-blue-700 font-medium text-sm"
+                >
+                  Sign Up for Full Features
+                </Link>
+              </div>
+            ) : (
+              <span className="text-sm text-gray-600">
+                Welcome, {user?.email}
+              </span>
+            )}
             <button
               onClick={handleSignOut}
               className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
             >
               <LogOut className="w-4 h-4" />
-              Sign Out
+              {isGuest ? 'Exit Guest Mode' : 'Sign Out'}
             </button>
           </div>
         </div>

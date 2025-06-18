@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { CreditCard, Shield, Zap, Target, ArrowRight, MessageCircle, TrendingUp, Users, Award } from 'lucide-react';
+import { CreditCard, Shield, Zap, Target, ArrowRight, MessageCircle, TrendingUp, Users, Award, UserCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -12,7 +12,7 @@ export const HomePage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, continueAsGuest } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -35,6 +35,11 @@ export const HomePage: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleGuestMode = () => {
+    continueAsGuest();
+    navigate('/chat');
   };
 
   return (
@@ -218,6 +223,30 @@ export const HomePage: React.FC = () => {
                   )}
                 </button>
               </form>
+
+              {/* Guest Option */}
+              <div className="mt-6">
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-300" />
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-2 bg-white text-gray-500">or</span>
+                  </div>
+                </div>
+                
+                <button
+                  onClick={handleGuestMode}
+                  className="mt-4 w-full flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 px-4 rounded-xl font-medium transition-colors border border-gray-200"
+                >
+                  <UserCheck className="w-5 h-5" />
+                  Try as Guest
+                </button>
+                
+                <p className="mt-3 text-xs text-gray-500 text-center">
+                  Guest mode provides full access to recommendations. Sign up to save your preferences and chat history.
+                </p>
+              </div>
 
               <div className="mt-8 text-center">
                 <p className="text-gray-600">
