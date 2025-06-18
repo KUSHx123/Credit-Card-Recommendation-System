@@ -118,7 +118,8 @@ Start by greeting the user warmly and asking about their monthly income in a fri
         }
       }
 
-      throw new Error('Failed to get response from assistant');
+      // Provide detailed error information based on the run status
+      throw new Error(`Assistant run failed with status: ${runStatus.status}. ${runStatus.last_error ? `Error: ${runStatus.last_error.message}` : 'No additional error details available.'}`);
     } catch (error) {
       console.error('Error sending message:', error);
       throw error;
