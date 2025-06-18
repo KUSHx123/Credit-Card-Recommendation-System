@@ -1,22 +1,26 @@
 # Credit Card Advisor AI
 
-An AI-powered credit card recommendation system that helps users find the perfect credit card based on their financial profile and spending habits.
+An AI-powered credit card recommendation system that helps users find the perfect credit card based on their financial profile and spending habits. Now with WhatsApp integration and guest mode support!
 
 ## 🚀 Features
 
-- **AI-Powered Conversations**: Uses OpenAI Assistants API for intelligent, context-aware conversations
-- **Personalized Recommendations**: Analyzes user profile to suggest the best-fit credit cards
+- **AI-Powered Conversations**: Uses OpenAI Assistants API for intelligent, context-aware conversations with fallback to guided questionnaire
+- **Guest Mode**: Full access to recommendations without requiring account creation
+- **Personalized Recommendations**: Analyzes user profile to suggest the best-fit credit cards from 20+ Indian banks
 - **User Authentication**: Secure login/signup with Supabase Auth
+- **Profile Management**: Comprehensive user profile page with spending habits and preferences
+- **WhatsApp Integration**: Complete WhatsApp bot integration using Twilio API
 - **Chat History**: Persistent conversation storage in Supabase database
 - **Card Comparison**: Side-by-side comparison of selected credit cards
 - **Responsive Design**: Mobile-friendly interface built with Tailwind CSS
-- **Real-time Chat**: Interactive chat interface with typing indicators
+- **Real-time Chat**: Interactive chat interface with option-based questions
 
 ## 🛠️ Tech Stack
 
 - **Frontend**: React 18, TypeScript, Tailwind CSS, Framer Motion
-- **Backend**: Supabase (Database + Auth)
-- **AI**: OpenAI Assistants API
+- **Backend**: Supabase (Database + Auth + Edge Functions)
+- **AI**: OpenAI Assistants API (with intelligent fallback)
+- **WhatsApp**: Twilio API integration
 - **Routing**: React Router DOM
 - **Icons**: Lucide React
 - **Build Tool**: Vite
@@ -27,7 +31,8 @@ Before running this project, make sure you have:
 
 1. Node.js (v18 or higher)
 2. A Supabase account and project
-3. An OpenAI API account with access to Assistants API
+3. An OpenAI API account with access to Assistants API (optional - fallback mode available)
+4. A Twilio account for WhatsApp integration (optional)
 
 ## 🔧 Setup Instructions
 
@@ -44,140 +49,125 @@ npm install
 Create a `.env` file in the root directory:
 
 ```env
+# Required - Supabase Configuration
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# Optional - OpenAI Configuration (fallback mode if not provided)
 VITE_OPENAI_API_KEY=your_openai_api_key
+
+# Optional - Twilio WhatsApp Integration
+VITE_TWILIO_ACCOUNT_SID=your_twilio_account_sid
+VITE_TWILIO_AUTH_TOKEN=your_twilio_auth_token
+VITE_TWILIO_PHONE_NUMBER=whatsapp:+your_twilio_whatsapp_number
 ```
 
 ### 3. Supabase Database Setup
 
-Run the following SQL commands in your Supabase SQL editor:
+The database schema is automatically set up using Supabase migrations. The migrations include:
 
-```sql
--- Create user profiles table
-CREATE TABLE user_profiles (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-  monthly_income INTEGER,
-  spending_habits JSONB,
-  preferred_benefits TEXT[],
-  credit_score INTEGER,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+- User profiles table
+- Chat sessions and messages
+- Credit cards database
+- WhatsApp sessions and messages
+- Row Level Security (RLS) policies
+- Proper indexes for performance
 
--- Create chat sessions table
-CREATE TABLE chat_sessions (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-  assistant_id TEXT,
-  thread_id TEXT,
-  status TEXT DEFAULT 'active',
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+### 4. Deploy Supabase Edge Functions (for WhatsApp)
 
--- Create chat messages table
-CREATE TABLE chat_messages (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  session_id UUID REFERENCES chat_sessions(id) ON DELETE CASCADE,
-  role TEXT NOT NULL,
-  content TEXT NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+If you want to use WhatsApp integration:
 
--- Create credit cards table
-CREATE TABLE credit_cards (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  name TEXT NOT NULL,
-  issuer TEXT NOT NULL,
-  image_url TEXT,
-  joining_fee INTEGER DEFAULT 0,
-  annual_fee INTEGER DEFAULT 0,
-  reward_type TEXT NOT NULL,
-  reward_rate DECIMAL,
-  min_income INTEGER,
-  min_credit_score INTEGER,
-  special_perks TEXT[],
-  categories JSONB,
-  features TEXT[],
-  apply_link TEXT,
-  welcome_bonus TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Enable Row Level Security
-ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE chat_sessions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE chat_messages ENABLE ROW LEVEL SECURITY;
-ALTER TABLE credit_cards ENABLE ROW LEVEL SECURITY;
-
--- Create RLS policies
-CREATE POLICY "Users can manage their own profiles" ON user_profiles
-  FOR ALL USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can manage their own chat sessions" ON chat_sessions
-  FOR ALL USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can access messages from their sessions" ON chat_messages
-  FOR ALL USING (
-    EXISTS (
-      SELECT 1 FROM chat_sessions 
-      WHERE chat_sessions.id = chat_messages.session_id 
-      AND chat_sessions.user_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "Anyone can read credit cards" ON credit_cards
-  FOR SELECT USING (true);
+```bash
+# Deploy the WhatsApp webhook function
+supabase functions deploy whatsapp-webhook
 ```
 
-### 4. Run the Application
+### 5. Run the Application
 
 ```bash
 npm run dev
 ```
 
-The application will be available at `http://localhost:5173
+The application will be available at `http://localhost:5173`
 
-Deployed Link: [Link](https://credit-card-recommendation-system.vercel.app/)`
+**Deployed Link**: [CardAdvisor AI](https://credit-card-recommendation-system.vercel.app/)
 
 ## 🏗️ Project Structure
 
 ```
 src/
 ├── components/          # Reusable UI components
-├── contexts/           # React contexts (Auth)
-├── data/              # Static data (credit cards)
-├── hooks/             # Custom React hooks
+│   ├── CardRecommendation.tsx
+│   ├── ChatInterface.tsx
+│   ├── ComparisonView.tsx
+│   ├── Navigation.tsx
+│   ├── ProtectedRoute.tsx
+│   └── WhatsAppIntegration.tsx
+├── contexts/           # React contexts (Auth with guest mode)
+├── data/              # Static data (20+ credit cards)
 ├── lib/               # External service configurations
+│   ├── openai.ts      # OpenAI Assistants API
+│   ├── supabase.ts    # Supabase client
+│   └── twilio.ts      # Twilio WhatsApp service
 ├── pages/             # Page components
+│   ├── HomePage.tsx   # Landing page with auth
+│   ├── ChatPage.tsx   # Main chat interface
+│   └── ProfilePage.tsx # User profile management
 ├── types/             # TypeScript type definitions
 ├── utils/             # Utility functions
+│   └── recommendationEngine.ts # AI recommendation logic
 └── App.tsx            # Main application component
 ```
 
 ## 🔑 Key Features Explained
 
-### AI-Powered Conversations
-- Uses OpenAI Assistants API for natural language processing
+### AI-Powered Conversations with Fallback
+- Primary: Uses OpenAI Assistants API for natural language processing
+- Fallback: Guided questionnaire system when OpenAI is unavailable
 - Maintains conversation context across messages
-- Asks relevant questions to build user profile
+- Option-based responses for better user experience
+
+### Guest Mode
+- Full access to credit card recommendations without account creation
+- Seamless upgrade path to full account
+- No feature limitations for guest users
+- Persistent session management
+
+### WhatsApp Integration
+- Complete WhatsApp bot using Twilio API
+- Guided conversation flow via WhatsApp messages
+- Automatic webhook handling with Supabase Edge Functions
+- Message history storage and session management
+- Easy setup through profile page
 
 ### Recommendation Engine
 - Analyzes user income, spending habits, and preferences
-- Scores and ranks credit cards based on compatibility
+- Scores and ranks 20+ credit cards based on compatibility
 - Provides detailed reasons for each recommendation
+- Estimates annual rewards based on spending patterns
 
-### User Authentication
-- Secure authentication with Supabase Auth
-- Protected routes for authenticated users
-- Persistent user sessions
+### User Profile Management
+- Comprehensive profile page for authenticated users
+- Spending habits tracking across multiple categories
+- Benefit preferences selection
+- Credit score range input
+- WhatsApp integration configuration
 
 ### Database Integration
 - Stores user profiles and preferences
 - Maintains chat history for each user
 - Tracks conversation sessions and status
+- WhatsApp conversation storage
+- Row Level Security for data protection
+
+## 📱 WhatsApp Bot Setup
+
+1. **Create Twilio Account**: Sign up at [twilio.com](https://twilio.com)
+2. **WhatsApp Sandbox**: Set up WhatsApp Sandbox in Twilio Console
+3. **Environment Variables**: Add Twilio credentials to your `.env` file
+4. **Deploy Webhook**: Deploy the Supabase edge function
+5. **Configure Webhook**: Set webhook URL in Twilio Console
+6. **Test Integration**: Use the profile page to test the connection
 
 ## 🚀 Deployment
 
@@ -194,16 +184,51 @@ Make sure to set these in your deployment platform:
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
-- `VITE_OPENAI_API_KEY`
+- `VITE_OPENAI_API_KEY` (optional)
+- `VITE_TWILIO_ACCOUNT_SID` (optional)
+- `VITE_TWILIO_AUTH_TOKEN` (optional)
+- `VITE_TWILIO_PHONE_NUMBER` (optional)
 
 ## 📱 Usage
 
-1. **Sign Up/Login**: Create an account or sign in
-2. **Start Chat**: Begin conversation with the AI advisor
-3. **Answer Questions**: Provide information about income, spending, preferences
-4. **Get Recommendations**: Receive personalized credit card suggestions
-5. **Compare Cards**: Select multiple cards for detailed comparison
-6. **Apply**: Use provided links to apply for chosen cards
+### Web Application
+1. **Visit Website**: Go to the deployed URL or run locally
+2. **Choose Mode**: Sign up/login or continue as guest
+3. **Start Chat**: Begin conversation with the AI advisor
+4. **Answer Questions**: Provide information about income, spending, preferences
+5. **Get Recommendations**: Receive personalized credit card suggestions
+6. **Compare Cards**: Select multiple cards for detailed comparison
+7. **Apply**: Use provided links to apply for chosen cards
+
+### WhatsApp Bot
+1. **Add Number**: Add the Twilio WhatsApp number to your contacts
+2. **Send Message**: Send any message to start the conversation
+3. **Follow Prompts**: Answer questions using numbered options
+4. **Get Recommendations**: Receive top 3 personalized recommendations
+5. **Restart**: Send "restart" to begin a new consultation
+
+## 🎯 Credit Card Database
+
+The system includes 20+ Indian credit cards from major banks:
+- HDFC Bank, SBI, Axis Bank, ICICI Bank
+- Kotak Mahindra, IndusInd, YES Bank
+- Standard Chartered, Citibank, RBL Bank
+- And many more regional banks
+
+Each card includes:
+- Detailed fee structure
+- Reward rates and categories
+- Eligibility criteria
+- Special perks and benefits
+- Application links
+
+## 🔒 Security Features
+
+- Row Level Security (RLS) on all database tables
+- Secure authentication with Supabase Auth
+- Environment variable protection
+- Guest mode with no data persistence
+- Encrypted API communications
 
 ## 🤝 Contributing
 
@@ -219,3 +244,14 @@ This project is licensed under the MIT License.
 ## 🆘 Support
 
 For support or questions, please open an issue in the GitHub repository.
+
+## 🔄 Recent Updates
+
+- ✅ Added guest mode for immediate access
+- ✅ Implemented WhatsApp bot integration
+- ✅ Enhanced chat interface with option-based responses
+- ✅ Added comprehensive profile management
+- ✅ Improved recommendation engine
+- ✅ Added fallback mode for OpenAI unavailability
+- ✅ Enhanced mobile responsiveness
+- ✅ Added card comparison feature
