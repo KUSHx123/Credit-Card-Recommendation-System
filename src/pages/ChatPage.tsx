@@ -705,11 +705,18 @@ This will help you maximize your rewards and benefits!`
   };
 
   const handleCompareCard = (cardId: string) => {
-    if (selectedCardsForComparison.includes(cardId)) {
-      setSelectedCardsForComparison(prev => prev.filter(id => id !== cardId));
-    } else if (selectedCardsForComparison.length < 3) {
-      setSelectedCardsForComparison(prev => [...prev, cardId]);
-    }
+    setSelectedCardsForComparison(prev => {
+      if (prev.includes(cardId)) {
+        // Remove card if already selected
+        return prev.filter(id => id !== cardId);
+      } else if (prev.length < 3) {
+        // Add card if less than 3 selected
+        return [...prev, cardId];
+      } else {
+        // Replace oldest selection if 3 cards already selected
+        return [...prev.slice(1), cardId];
+      }
+    });
   };
 
   const handleShowComparison = () => {
@@ -907,6 +914,7 @@ This will help you maximize your rewards and benefits!`
                   recommendation={recommendation}
                   index={index}
                   onCompare={handleCompareCard}
+                  isSelected={selectedCardsForComparison.includes(recommendation.card.id)}
                 />
               ))}
             </div>

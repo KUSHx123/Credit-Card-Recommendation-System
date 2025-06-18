@@ -1,27 +1,35 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { ExternalLink, Award, CreditCard, Percent, Star } from 'lucide-react';
+import { ExternalLink, Award, CreditCard, Percent, Star, Check } from 'lucide-react';
 import { CardRecommendation } from '../types';
 
 interface CardRecommendationProps {
   recommendation: CardRecommendation;
   index: number;
   onCompare: (cardId: string) => void;
+  isSelected?: boolean;
 }
 
 export const CardRecommendationComponent: React.FC<CardRecommendationProps> = ({
   recommendation,
   index,
-  onCompare
+  onCompare,
+  isSelected = false
 }) => {
   const { card, reasons, estimatedRewards, matchPercentage } = recommendation;
+
+  const handleCompareClick = () => {
+    onCompare(card.id);
+  };
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 50 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.2 }}
-      className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden hover:shadow-xl transition-shadow duration-300"
+      className={`bg-white rounded-2xl shadow-lg border-2 overflow-hidden hover:shadow-xl transition-all duration-300 ${
+        isSelected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200'
+      }`}
     >
       {/* Header with match percentage */}
       <div className="relative">
@@ -44,6 +52,13 @@ export const CardRecommendationComponent: React.FC<CardRecommendationProps> = ({
           <div className="absolute top-4 left-4 bg-yellow-400 text-gray-900 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1">
             <Star className="w-4 h-4 fill-current" />
             Best Match
+          </div>
+        )}
+
+        {isSelected && (
+          <div className="absolute bottom-4 left-4 bg-blue-500 text-white px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1">
+            <Check className="w-4 h-4" />
+            Selected
           </div>
         )}
       </div>
@@ -114,10 +129,21 @@ export const CardRecommendationComponent: React.FC<CardRecommendationProps> = ({
         {/* Action Buttons */}
         <div className="flex gap-3 pt-4">
           <button
-            onClick={() => onCompare(card.id)}
-            className="flex-1 px-4 py-2 border border-blue-500 text-blue-500 rounded-lg hover:bg-blue-50 transition-colors font-medium"
+            onClick={handleCompareClick}
+            className={`flex-1 px-4 py-2 border rounded-lg transition-colors font-medium flex items-center justify-center gap-2 ${
+              isSelected
+                ? 'bg-blue-500 text-white border-blue-500 hover:bg-blue-600'
+                : 'border-blue-500 text-blue-500 hover:bg-blue-50'
+            }`}
           >
-            Compare
+            {isSelected ? (
+              <>
+                <Check className="w-4 h-4" />
+                Selected
+              </>
+            ) : (
+              'Compare'
+            )}
           </button>
           <a
             href={card.applyLink}
