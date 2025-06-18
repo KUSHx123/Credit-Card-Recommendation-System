@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, MessageCircle, RefreshCw, Sparkles } from 'lucide-react';
+import { Send, MessageCircle, RefreshCw, Sparkles, AlertCircle } from 'lucide-react';
 import { Navigation } from '../components/Navigation';
 import { useAuth } from '../contexts/AuthContext';
 import { openaiAssistant } from '../lib/openai';
@@ -27,6 +27,7 @@ export const ChatPage: React.FC = () => {
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [selectedCardsForComparison, setSelectedCardsForComparison] = useState<string[]>([]);
   const [showComparison, setShowComparison] = useState(false);
+  const [openaiAvailable, setOpenaiAvailable] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const recommendationEngine = new RecommendationEngine();
@@ -47,6 +48,10 @@ export const ChatPage: React.FC = () => {
     if (!user) return;
 
     try {
+      // Check if OpenAI is available
+      const isOpenAIAvailable = openaiAssistant.isOpenAIAvailable();
+      setOpenaiAvailable(isOpenAIAvailable);
+
       // Check for existing active session
       const { data: existingSession } = await supabase
         .from('chat_sessions')
@@ -88,11 +93,11 @@ export const ChatPage: React.FC = () => {
           }
         }
 
-        // Set up OpenAI assistant with existing thread
-        if (existingSession.assistant_id) {
+        // Set up OpenAI assistant with existing thread if available
+        if (isOpenAIAvailable && existingSession.assistant_id) {
           openaiAssistant.setAssistantId(existingSession.assistant_id);
         }
-        if (existingSession.thread_id) {
+        if (isOpenAIAvailable && existingSession.thread_id) {
           openaiAssistant.setThreadId(existingSession.thread_id);
         }
       } else {
@@ -110,18 +115,25 @@ export const ChatPage: React.FC = () => {
           currentSessionId = newSession.id;
           setSessionId(currentSessionId);
           
-          // Initialize OpenAI assistant
-          const assistantId = await openaiAssistant.createAssistant();
-          const threadId = await openaiAssistant.createThread();
+          // Initialize OpenAI assistant if available
+          if (isOpenAIAvailable) {
+            try {
+              const assistantId = await openaiAssistant.createAssistant();
+              const threadId = await openaiAssistant.createThread();
 
-          // Update session with OpenAI IDs
-          await supabase
-            .from('chat_sessions')
-            .update({
-              assistant_id: assistantId,
-              thread_id: threadId
-            })
-            .eq('id', currentSessionId);
+              // Update session with OpenAI IDs
+              await supabase
+                .from('chat_sessions')
+                .update({
+                  assistant_id: assistantId,
+                  thread_id: threadId
+                })
+                .eq('id', currentSessionId);
+            } catch (error) {
+              console.warn('Failed to initialize OpenAI assistant:', error);
+              setOpenaiAvailable(false);
+            }
+          }
 
           // Send initial greeting
           setTimeout(() => {
@@ -139,11 +151,19 @@ export const ChatPage: React.FC = () => {
   };
 
   const sendInitialGreeting = async () => {
-    const greeting = `Hello! 👋 I'm your AI credit card advisor, and I'm excited to help you find the perfect credit card for your needs!
+    const greeting = openaiAvailable 
+      ? `Hello! 👋 I'm your AI credit card advisor, and I'm excited to help you find the perfect credit card for your needs!
 
 I'll ask you a few questions about your financial profile and spending habits to provide personalized recommendations from 20+ Indian credit cards.
 
-Let's start with the basics - what's your approximate monthly income? You can share a range if you prefer (e.g., "around 50,000" or "between 30-40k").`;
+Let's start with the basics - what's your approximate monthly income? You can share a range if you prefer (e.g., "around 50,000" or "between 30-40k").`
+      : `Hello! 👋 Welcome to CardAdvisor AI!
+
+I'll help you find the perfect credit card by asking a few questions about your financial profile and spending habits.
+
+Since our AI assistant is currently unavailable, I'll guide you through a quick questionnaire to provide personalized recommendations from 20+ Indian credit cards.
+
+Let's start - what's your approximate monthly income? You can share a range if you prefer (e.g., "around 50,000" or "between 30-40k").`;
     
     const message: Message = {
       id: Date.now().toString(),
@@ -190,8 +210,22 @@ Let's start with the basics - what's your approximate monthly income? You can sh
           content: userMessage.content
         });
 
-      // Send to OpenAI Assistant
-      const response = await openaiAssistant.sendMessage(userMessage.content);
+      let response: string;
+
+      if (openaiAvailable) {
+        try {
+          // Send to OpenAI Assistant
+          response = await openaiAssistant.sendMessage(userMessage.content);
+        } catch (error) {
+          console.error('OpenAI error:', error);
+          // Fallback to rule-based response
+          response = generateRuleBasedResponse(userMessage.content, messages);
+          setOpenaiAvailable(false);
+        }
+      } else {
+        // Use rule-based response
+        response = generateRuleBasedResponse(userMessage.content, messages);
+      }
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -240,6 +274,86 @@ Let's start with the basics - what's your approximate monthly income? You can sh
     } finally {
       setIsTyping(false);
     }
+  };
+
+  const generateRuleBasedResponse = (userInput: string, conversationHistory: Message[]): string => {
+    const input = userInput.toLowerCase();
+    const conversationText = conversationHistory.map(m => m.content.toLowerCase()).join(' ');
+
+    // Check what information we already have
+    const hasIncome = conversationText.includes('income') || conversationText.includes('salary');
+    const hasSpending = conversationText.includes('spending') || conversationText.includes('fuel') || conversationText.includes('groceries');
+    const hasBenefits = conversationText.includes('benefits') || conversationText.includes('cashback') || conversationText.includes('points');
+
+    // Income question
+    if (!hasIncome && (input.includes('income') || input.match(/\d+/))) {
+      return `Thank you for sharing your income information! That helps me understand your eligibility for different cards.
+
+Now, let's talk about your spending habits. This will help me recommend cards with the best rewards for your lifestyle.
+
+How much do you typically spend on fuel per month? (e.g., "around 3,000" or "I don't drive much")`;
+    }
+
+    // Spending questions
+    if (!hasSpending && (input.includes('fuel') || input.includes('petrol') || input.includes('gas'))) {
+      return `Got it! Fuel spending is important for reward calculations.
+
+What about groceries and daily shopping? How much do you spend monthly on groceries, supermarkets, or local stores?`;
+    }
+
+    if (input.includes('groceries') || input.includes('shopping') || input.includes('store')) {
+      return `Perfect! Now I'm getting a good picture of your spending pattern.
+
+Do you frequently dine out or order food online? What's your approximate monthly spending on restaurants, food delivery, or dining?`;
+    }
+
+    if (input.includes('dining') || input.includes('food') || input.includes('restaurant')) {
+      return `Excellent! One more spending category - do you do much online shopping? This includes e-commerce sites like Amazon, Flipkart, or any online purchases.
+
+What's your typical monthly online shopping amount?`;
+    }
+
+    // Benefits question
+    if (!hasBenefits && (input.includes('online') || input.includes('amazon') || input.includes('flipkart'))) {
+      return `Great! Now I have a good understanding of your spending habits.
+
+What type of benefits matter most to you? Please choose from:
+- Cashback on purchases
+- Travel points/miles
+- Airport lounge access
+- Movie ticket discounts
+- Fuel surcharge waivers
+- Dining discounts
+
+You can mention multiple preferences!`;
+    }
+
+    // Final question - credit score
+    if (hasBenefits && (input.includes('cashback') || input.includes('points') || input.includes('lounge') || input.includes('movie') || input.includes('fuel') || input.includes('dining'))) {
+      return `Perfect! I now have all the information I need about your preferences.
+
+One last question - what's your approximate credit score range?
+- Excellent (750+)
+- Good (650-750) 
+- Fair (600-650)
+- I'm not sure
+
+Based on all this information, I'll be ready to provide personalized recommendations that match your profile perfectly!`;
+    }
+
+    // Ready for recommendations
+    if (input.includes('excellent') || input.includes('good') || input.includes('fair') || input.includes('not sure') || input.includes('don\'t know')) {
+      return `Wonderful! I now have a complete picture of your financial profile and preferences.
+
+Based on your income, spending habits, preferred benefits, and credit profile, I'm ready to provide personalized credit card recommendations that will maximize your rewards and benefits.
+
+Let me analyze the best matches for you from our database of 20+ Indian credit cards...`;
+    }
+
+    // Default response
+    return `Thank you for that information! Could you provide a bit more detail? I want to make sure I give you the most accurate recommendations possible.
+
+If you'd like, you can also tell me about any specific credit card features you're looking for, or any banks you prefer.`;
   };
 
   const generateRecommendationsFromConversation = async (conversationMessages: Message[]) => {
@@ -382,8 +496,14 @@ Let's start with the basics - what's your approximate monthly income? You can sh
                 </div>
                 <div className="flex-1">
                   <h2 className="font-semibold text-gray-900">Credit Card Advisor AI</h2>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-gray-500 flex items-center gap-2">
                     {isTyping ? 'Typing...' : 'Ready to help you find the perfect card'}
+                    {!openaiAvailable && (
+                      <span className="inline-flex items-center gap-1 bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full text-xs">
+                        <AlertCircle className="w-3 h-3" />
+                        Fallback Mode
+                      </span>
+                    )}
                   </p>
                 </div>
                 <button

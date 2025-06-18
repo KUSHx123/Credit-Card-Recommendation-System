@@ -1,15 +1,34 @@
 import OpenAI from 'openai';
 
-const openai = new OpenAI({
-  apiKey: import.meta.env.VITE_OPENAI_API_KEY,
-  dangerouslyAllowBrowser: true
-});
+// Initialize OpenAI with error handling
+let openai: OpenAI | null = null;
+
+try {
+  const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+  if (apiKey && apiKey !== 'your_openai_api_key_here') {
+    openai = new OpenAI({
+      apiKey: apiKey,
+      dangerouslyAllowBrowser: true
+    });
+  }
+} catch (error) {
+  console.warn('OpenAI initialization failed:', error);
+}
 
 export class OpenAIAssistant {
   private assistantId: string | null = null;
   private threadId: string | null = null;
+  private isAvailable: boolean = false;
+
+  constructor() {
+    this.isAvailable = openai !== null;
+  }
 
   async createAssistant() {
+    if (!this.isAvailable || !openai) {
+      throw new Error('OpenAI is not available. Please check your API key.');
+    }
+
     try {
       const assistant = await openai.beta.assistants.create({
         name: "Credit Card Advisor",
@@ -50,6 +69,10 @@ Start by greeting the user warmly and asking about their monthly income in a fri
   }
 
   async createThread() {
+    if (!this.isAvailable || !openai) {
+      throw new Error('OpenAI is not available. Please check your API key.');
+    }
+
     try {
       const thread = await openai.beta.threads.create();
       this.threadId = thread.id;
@@ -61,8 +84,8 @@ Start by greeting the user warmly and asking about their monthly income in a fri
   }
 
   async sendMessage(message: string) {
-    if (!this.threadId || !this.assistantId) {
-      throw new Error('Thread or Assistant not initialized');
+    if (!this.threadId || !this.assistantId || !this.isAvailable || !openai) {
+      throw new Error('Thread, Assistant not initialized, or OpenAI not available');
     }
 
     try {
@@ -116,6 +139,10 @@ Start by greeting the user warmly and asking about their monthly income in a fri
 
   setThreadId(id: string) {
     this.threadId = id;
+  }
+
+  isOpenAIAvailable() {
+    return this.isAvailable;
   }
 }
 
