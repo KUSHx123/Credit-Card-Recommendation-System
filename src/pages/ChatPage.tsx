@@ -6,9 +6,9 @@ import { useAuth } from '../contexts/AuthContext';
 import { openaiAssistant } from '../lib/openai';
 import { supabase } from '../lib/supabase';
 import { CardRecommendationComponent } from '../components/CardRecommendation';
-import { ComparisonView } from '../components/ComparisonView';
 import { creditCardsData } from '../data/creditCards';
 import { RecommendationEngine } from '../utils/recommendationEngine';
+import { useNavigate } from 'react-router-dom';
 
 interface Message {
   id: string;
@@ -49,6 +49,7 @@ interface UserProfile {
 
 export const ChatPage: React.FC = () => {
   const { user, isGuest } = useAuth();
+  const navigate = useNavigate();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -56,7 +57,6 @@ export const ChatPage: React.FC = () => {
   const [showRecommendations, setShowRecommendations] = useState(false);
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [selectedCardsForComparison, setSelectedCardsForComparison] = useState<string[]>([]);
-  const [showComparison, setShowComparison] = useState(false);
   const [openaiAvailable, setOpenaiAvailable] = useState(true);
   const [currentStep, setCurrentStep] = useState<ConversationStep>('greeting');
   const [userProfile, setUserProfile] = useState<UserProfile>({});
@@ -693,7 +693,6 @@ This will help you maximize your rewards and benefits!`
       setShowRecommendations(false);
       setRecommendations([]);
       setSelectedCardsForComparison([]);
-      setShowComparison(false);
       setCurrentStep('greeting');
       setUserProfile({});
 
@@ -721,13 +720,10 @@ This will help you maximize your rewards and benefits!`
 
   const handleShowComparison = () => {
     if (selectedCardsForComparison.length >= 2) {
-      setShowComparison(true);
+      const cardIds = selectedCardsForComparison.join(',');
+      navigate(`/compare?cards=${cardIds}`);
     }
   };
-
-  const comparisonCards = creditCardsData.filter(card => 
-    selectedCardsForComparison.includes(card.id)
-  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
@@ -937,16 +933,6 @@ This will help you maximize your rewards and benefits!`
           </div>
         )}
       </div>
-
-      {/* Comparison Modal */}
-      <AnimatePresence>
-        {showComparison && (
-          <ComparisonView
-            cards={comparisonCards}
-            onClose={() => setShowComparison(false)}
-          />
-        )}
-      </AnimatePresence>
     </div>
   );
 };
