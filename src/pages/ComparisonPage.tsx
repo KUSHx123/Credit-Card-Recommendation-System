@@ -42,11 +42,11 @@ export const ComparisonPage: React.FC = () => {
   }
 
   const comparisonRows = [
-    { key: 'joiningFee', label: 'Joining Fee', format: (value: number) => value === 0 ? 'FREE' : `₹${value.toLocaleString()}` },
-    { key: 'annualFee', label: 'Annual Fee', format: (value: number) => value === 0 ? 'FREE' : `₹${value.toLocaleString()}` },
-    { key: 'rewardType', label: 'Reward Type', format: (value: string) => value.charAt(0).toUpperCase() + value.slice(1) },
-    { key: 'minIncome', label: 'Min. Annual Income', format: (value: number) => `₹${(value / 100000).toFixed(1)}L` },
-    { key: 'minCreditScore', label: 'Min. Credit Score', format: (value: number) => value.toString() }
+    { key: 'joiningFee', label: 'Joining Fee', format: (value: number) => (value ?? 0) === 0 ? 'FREE' : `₹${(value ?? 0).toLocaleString()}` },
+    { key: 'annualFee', label: 'Annual Fee', format: (value: number) => (value ?? 0) === 0 ? 'FREE' : `₹${(value ?? 0).toLocaleString()}` },
+    { key: 'rewardType', label: 'Reward Type', format: (value: string) => value?.charAt(0).toUpperCase() + value?.slice(1) || 'N/A' },
+    { key: 'minIncome', label: 'Min. Annual Income', format: (value: number) => value ? `₹${(value / 100000).toFixed(1)}L` : 'N/A' },
+    { key: 'minCreditScore', label: 'Min. Credit Score', format: (value: number) => value?.toString() || 'N/A' }
   ];
 
   return (
@@ -126,13 +126,13 @@ export const ComparisonPage: React.FC = () => {
                   {cards.map((card) => (
                     <td key={card.id} className="p-6">
                       <div className="space-y-2">
-                        {card.specialPerks.slice(0, 4).map((perk, idx) => (
+                        {card.specialPerks?.slice(0, 4).map((perk, idx) => (
                           <div key={idx} className="flex items-start gap-2 text-sm text-gray-600">
                             <Check className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
                             <span>{perk}</span>
                           </div>
-                        ))}
-                        {card.specialPerks.length > 4 && (
+                        )) || <span className="text-sm text-gray-400">No perks listed</span>}
+                        {card.specialPerks && card.specialPerks.length > 4 && (
                           <p className="text-xs text-gray-400 mt-2">+{card.specialPerks.length - 4} more perks</p>
                         )}
                       </div>
@@ -147,13 +147,13 @@ export const ComparisonPage: React.FC = () => {
                     <td key={card.id} className="p-6">
                       <div className="space-y-2">
                         {card.categories
-                          .sort((a, b) => b.rate - a.rate)
+                          ?.sort((a, b) => b.rate - a.rate)
                           .slice(0, 4)
                           .map((category, idx) => (
                             <div key={idx} className="text-sm text-gray-600">
                               <span className="font-bold text-blue-600">{category.rate}X</span> {category.category}
                             </div>
-                          ))}
+                          )) || <span className="text-sm text-gray-400">No categories listed</span>}
                       </div>
                     </td>
                   ))}
@@ -165,13 +165,13 @@ export const ComparisonPage: React.FC = () => {
                   {cards.map((card) => (
                     <td key={card.id} className="p-6">
                       <div className="space-y-2">
-                        {card.features.slice(0, 3).map((feature, idx) => (
+                        {card.features?.slice(0, 3).map((feature, idx) => (
                           <div key={idx} className="flex items-start gap-2 text-sm text-gray-600">
                             <Check className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
                             <span>{feature}</span>
                           </div>
-                        ))}
-                        {card.features.length > 3 && (
+                        )) || <span className="text-sm text-gray-400">No features listed</span>}
+                        {card.features && card.features.length > 3 && (
                           <p className="text-xs text-gray-400 mt-2">+{card.features.length - 3} more features</p>
                         )}
                       </div>
