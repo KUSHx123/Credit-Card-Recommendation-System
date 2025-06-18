@@ -428,7 +428,7 @@ export const HomePage: React.FC = () => {
               </div>
             </div>
             <div className="text-gray-400 text-sm">
-              © 2024 CardAdvisor AI. All rights reserved.
+              © 2025 CardAdvisor AI. All rights reserved.
             </div>
           </div>
         </div>
