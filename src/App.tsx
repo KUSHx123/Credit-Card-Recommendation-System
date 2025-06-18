@@ -4,6 +4,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { HomePage } from './pages/HomePage';
 import { ChatPage } from './pages/ChatPage';
+import { ProfilePage } from './pages/ProfilePage';
 
 function App() {
   return (
@@ -16,6 +17,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <ChatPage />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/profile" 
+            element={
+              <ProtectedRoute>
+                <ProfilePage />
               </ProtectedRoute>
             } 
           />

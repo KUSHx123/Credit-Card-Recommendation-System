@@ -43,6 +43,20 @@ export const Navigation: React.FC = () => {
                 <MessageCircle className="w-4 h-4" />
                 Chat
               </Link>
+              
+              {user && !isGuest && (
+                <Link
+                  to="/profile"
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                    location.pathname === '/profile'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+                >
+                  <User className="w-4 h-4" />
+                  Profile
+                </Link>
+              )}
             </div>
           </div>
 

@@ -15,6 +15,36 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  options?: string[];
+}
+
+type ConversationStep = 
+  | 'greeting'
+  | 'income'
+  | 'spending_fuel'
+  | 'spending_travel' 
+  | 'spending_groceries'
+  | 'spending_dining'
+  | 'spending_online'
+  | 'spending_utilities'
+  | 'benefits'
+  | 'existing_cards'
+  | 'credit_score'
+  | 'recommendations';
+
+interface UserProfile {
+  monthlyIncome?: number;
+  spendingHabits?: {
+    fuel: number;
+    travel: number;
+    groceries: number;
+    dining: number;
+    online: number;
+    utilities: number;
+  };
+  preferredBenefits?: string[];
+  existingCards?: string[];
+  creditScore?: number;
 }
 
 export const ChatPage: React.FC = () => {
@@ -28,6 +58,8 @@ export const ChatPage: React.FC = () => {
   const [selectedCardsForComparison, setSelectedCardsForComparison] = useState<string[]>([]);
   const [showComparison, setShowComparison] = useState(false);
   const [openaiAvailable, setOpenaiAvailable] = useState(true);
+  const [currentStep, setCurrentStep] = useState<ConversationStep>('greeting');
+  const [userProfile, setUserProfile] = useState<UserProfile>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const recommendationEngine = new RecommendationEngine();
@@ -162,28 +194,33 @@ export const ChatPage: React.FC = () => {
   };
 
   const sendInitialGreeting = async () => {
-    const greeting = openaiAvailable 
-      ? `Hello! 👋 I'm your AI credit card advisor, and I'm excited to help you find the perfect credit card for your needs!
+    const greeting = `Hello! 👋 I'm your AI credit card advisor, and I'm excited to help you find the perfect credit card for your needs!
 
 I'll ask you a few questions about your financial profile and spending habits to provide personalized recommendations from 20+ Indian credit cards.
 
-Let's start with the basics - what's your approximate monthly income? You can share a range if you prefer (e.g., "around 50,000" or "between 30-40k").`
-      : `Hello! 👋 Welcome to CardAdvisor AI!
-
-I'll help you find the perfect credit card by asking a few questions about your financial profile and spending habits.
-
-Since our AI assistant is currently unavailable, I'll guide you through a quick questionnaire to provide personalized recommendations from 20+ Indian credit cards.
-
-Let's start - what's your approximate monthly income? You can share a range if you prefer (e.g., "around 50,000" or "between 30-40k").`;
+Let's start with the basics - what's your approximate monthly income?`;
+    
+    const incomeOptions = [
+      '₹25,000 - ₹35,000',
+      '₹35,000 - ₹50,000',
+      '₹50,000 - ₹75,000',
+      '₹75,000 - ₹1,00,000',
+      '₹1,00,000 - ₹1,50,000',
+      '₹1,50,000 - ₹2,50,000',
+      '₹2,50,000 - ₹5,00,000',
+      '₹5,00,000+'
+    ];
     
     const message: Message = {
       id: Date.now().toString(),
       role: 'assistant',
       content: greeting,
-      timestamp: new Date()
+      timestamp: new Date(),
+      options: incomeOptions
     };
 
     setMessages([message]);
+    setCurrentStep('income');
     
     // Only save to database if user is authenticated
     if (sessionId && user) {
@@ -197,55 +234,40 @@ Let's start - what's your approximate monthly income? You can share a range if y
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputValue.trim() || isTyping) return;
+  const handleOptionClick = async (option: string) => {
+    if (isTyping) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: inputValue.trim(),
+      content: option,
       timestamp: new Date()
     };
 
     setMessages(prev => [...prev, userMessage]);
-    setInputValue('');
     setIsTyping(true);
 
-    try {
-      // Save user message to database only if authenticated
-      if (sessionId && user) {
-        await supabase
-          .from('chat_messages')
-          .insert({
-            session_id: sessionId,
-            role: 'user',
-            content: userMessage.content
-          });
-      }
+    // Save user message to database only if authenticated
+    if (sessionId && user) {
+      await supabase
+        .from('chat_messages')
+        .insert({
+          session_id: sessionId,
+          role: 'user',
+          content: option
+        });
+    }
 
-      let response: string;
-
-      if (openaiAvailable && !isGuest) {
-        try {
-          // Send to OpenAI Assistant
-          response = await openaiAssistant.sendMessage(userMessage.content);
-        } catch (error) {
-          console.error('OpenAI error:', error);
-          // Fallback to rule-based response
-          response = generateRuleBasedResponse(userMessage.content, messages);
-          setOpenaiAvailable(false);
-        }
-      } else {
-        // Use rule-based response
-        response = generateRuleBasedResponse(userMessage.content, messages);
-      }
-
+    // Process the response based on current step
+    setTimeout(async () => {
+      const response = await processStepResponse(option);
+      
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: response,
-        timestamp: new Date()
+        content: response.content,
+        timestamp: new Date(),
+        options: response.options
       };
 
       setMessages(prev => [...prev, assistantMessage]);
@@ -257,132 +279,268 @@ Let's start - what's your approximate monthly income? You can share a range if y
           .insert({
             session_id: sessionId,
             role: 'assistant',
-            content: response
+            content: response.content
           });
       }
 
-      // Check if conversation is complete and should show recommendations
-      if (response.toLowerCase().includes('ready to provide') || 
-          response.toLowerCase().includes('personalized recommendations') ||
-          response.toLowerCase().includes('based on your profile') ||
-          response.toLowerCase().includes('here are my recommendations')) {
-        
-        // Generate recommendations from conversation
-        setTimeout(() => {
-          generateRecommendationsFromConversation([...messages, userMessage, assistantMessage]);
-        }, 2000);
-      }
-
-    } catch (error) {
-      console.error('Error sending message:', error);
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: 'I apologize, but I encountered an error. Let me provide you with some great credit card recommendations based on typical spending patterns. Please continue with your questions!',
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, errorMessage]);
-      
-      // Generate default recommendations
-      setTimeout(() => {
-        generateDefaultRecommendations();
-      }, 1000);
-    } finally {
       setIsTyping(false);
+    }, 1500);
+  };
+
+  const processStepResponse = async (userInput: string): Promise<{ content: string; options?: string[] }> => {
+    switch (currentStep) {
+      case 'income':
+        // Parse income and store
+        const incomeMap: { [key: string]: number } = {
+          '₹25,000 - ₹35,000': 30000,
+          '₹35,000 - ₹50,000': 42500,
+          '₹50,000 - ₹75,000': 62500,
+          '₹75,000 - ₹1,00,000': 87500,
+          '₹1,00,000 - ₹1,50,000': 125000,
+          '₹1,50,000 - ₹2,50,000': 200000,
+          '₹2,50,000 - ₹5,00,000': 375000,
+          '₹5,00,000+': 750000
+        };
+        
+        setUserProfile(prev => ({ ...prev, monthlyIncome: incomeMap[userInput] }));
+        setCurrentStep('spending_fuel');
+        
+        return {
+          content: `Great! Now let's understand your spending habits to find cards with the best rewards for your lifestyle.
+
+How much do you typically spend on fuel and petrol per month?`,
+          options: ['₹0 - ₹1,000', '₹1,000 - ₹2,000', '₹2,000 - ₹3,000', '₹3,000 - ₹5,000', '₹5,000+', "I don't drive"]
+        };
+
+      case 'spending_fuel':
+        const fuelMap: { [key: string]: number } = {
+          '₹0 - ₹1,000': 500,
+          '₹1,000 - ₹2,000': 1500,
+          '₹2,000 - ₹3,000': 2500,
+          '₹3,000 - ₹5,000': 4000,
+          '₹5,000+': 6000,
+          "I don't drive": 0
+        };
+        
+        setUserProfile(prev => ({ 
+          ...prev, 
+          spendingHabits: { ...prev.spendingHabits, fuel: fuelMap[userInput] || 0 } as any
+        }));
+        setCurrentStep('spending_groceries');
+        
+        return {
+          content: `Perfect! What about groceries and daily shopping? How much do you spend monthly on groceries, supermarkets, or local stores?`,
+          options: ['₹2,000 - ₹4,000', '₹4,000 - ₹6,000', '₹6,000 - ₹8,000', '₹8,000 - ₹12,000', '₹12,000+']
+        };
+
+      case 'spending_groceries':
+        const groceryMap: { [key: string]: number } = {
+          '₹2,000 - ₹4,000': 3000,
+          '₹4,000 - ₹6,000': 5000,
+          '₹6,000 - ₹8,000': 7000,
+          '₹8,000 - ₹12,000': 10000,
+          '₹12,000+': 15000
+        };
+        
+        setUserProfile(prev => ({ 
+          ...prev, 
+          spendingHabits: { ...prev.spendingHabits, groceries: groceryMap[userInput] || 0 } as any
+        }));
+        setCurrentStep('spending_dining');
+        
+        return {
+          content: `Excellent! Do you frequently dine out or order food online? What's your approximate monthly spending on restaurants, food delivery, or dining?`,
+          options: ['₹1,000 - ₹2,000', '₹2,000 - ₹4,000', '₹4,000 - ₹6,000', '₹6,000 - ₹10,000', '₹10,000+', 'Rarely dine out']
+        };
+
+      case 'spending_dining':
+        const diningMap: { [key: string]: number } = {
+          '₹1,000 - ₹2,000': 1500,
+          '₹2,000 - ₹4,000': 3000,
+          '₹4,000 - ₹6,000': 5000,
+          '₹6,000 - ₹10,000': 8000,
+          '₹10,000+': 12000,
+          'Rarely dine out': 500
+        };
+        
+        setUserProfile(prev => ({ 
+          ...prev, 
+          spendingHabits: { ...prev.spendingHabits, dining: diningMap[userInput] || 0 } as any
+        }));
+        setCurrentStep('spending_online');
+        
+        return {
+          content: `Great! What about online shopping? This includes e-commerce sites like Amazon, Flipkart, or any online purchases. What's your typical monthly online shopping amount?`,
+          options: ['₹1,000 - ₹3,000', '₹3,000 - ₹5,000', '₹5,000 - ₹8,000', '₹8,000 - ₹15,000', '₹15,000+', 'Minimal online shopping']
+        };
+
+      case 'spending_online':
+        const onlineMap: { [key: string]: number } = {
+          '₹1,000 - ₹3,000': 2000,
+          '₹3,000 - ₹5,000': 4000,
+          '₹5,000 - ₹8,000': 6500,
+          '₹8,000 - ₹15,000': 11500,
+          '₹15,000+': 20000,
+          'Minimal online shopping': 1000
+        };
+        
+        setUserProfile(prev => ({ 
+          ...prev, 
+          spendingHabits: { ...prev.spendingHabits, online: onlineMap[userInput] || 0 } as any
+        }));
+        setCurrentStep('spending_utilities');
+        
+        return {
+          content: `Perfect! Last spending category - how much do you spend on utility bills, mobile recharges, and other bill payments per month?`,
+          options: ['₹1,000 - ₹2,000', '₹2,000 - ₹3,000', '₹3,000 - ₹5,000', '₹5,000+']
+        };
+
+      case 'spending_utilities':
+        const utilitiesMap: { [key: string]: number } = {
+          '₹1,000 - ₹2,000': 1500,
+          '₹2,000 - ₹3,000': 2500,
+          '₹3,000 - ₹5,000': 4000,
+          '₹5,000+': 6000
+        };
+        
+        setUserProfile(prev => ({ 
+          ...prev, 
+          spendingHabits: { 
+            ...prev.spendingHabits, 
+            utilities: utilitiesMap[userInput] || 0,
+            travel: 2000 // Default travel spending
+          } as any
+        }));
+        setCurrentStep('benefits');
+        
+        return {
+          content: `Excellent! Now I have a good understanding of your spending habits. What type of benefits matter most to you? (You can select multiple)`,
+          options: [
+            'Cashback on purchases',
+            'Travel points/miles',
+            'Airport lounge access',
+            'Movie ticket discounts',
+            'Fuel surcharge waivers',
+            'Dining discounts',
+            'No annual fee',
+            'Continue to next question'
+          ]
+        };
+
+      case 'benefits':
+        if (userInput === 'Continue to next question') {
+          setCurrentStep('credit_score');
+          return {
+            content: `Perfect! One last question - what's your approximate credit score range?`,
+            options: [
+              'Excellent (750+)',
+              'Very Good (700-750)',
+              'Good (650-700)',
+              'Fair (600-650)',
+              "I don't know"
+            ]
+          };
+        } else {
+          // Add benefit to preferences
+          setUserProfile(prev => ({
+            ...prev,
+            preferredBenefits: [...(prev.preferredBenefits || []), userInput]
+          }));
+          
+          return {
+            content: `Great choice! Any other benefits you'd like? Or continue to the next question.`,
+            options: [
+              'Cashback on purchases',
+              'Travel points/miles',
+              'Airport lounge access',
+              'Movie ticket discounts',
+              'Fuel surcharge waivers',
+              'Dining discounts',
+              'No annual fee',
+              'Continue to next question'
+            ].filter(option => !userProfile.preferredBenefits?.includes(option))
+          };
+        }
+
+      case 'credit_score':
+        const scoreMap: { [key: string]: number } = {
+          'Excellent (750+)': 780,
+          'Very Good (700-750)': 725,
+          'Good (650-700)': 675,
+          'Fair (600-650)': 625,
+          "I don't know": 700
+        };
+        
+        const finalProfile = {
+          ...userProfile,
+          creditScore: scoreMap[userInput] || 700
+        };
+        
+        setUserProfile(finalProfile);
+        setCurrentStep('recommendations');
+        
+        // Generate recommendations
+        setTimeout(() => {
+          generateRecommendations(finalProfile);
+        }, 2000);
+        
+        return {
+          content: `Wonderful! I now have a complete picture of your financial profile and preferences.
+
+Based on your income, spending habits, preferred benefits, and credit profile, I'm analyzing the best credit card matches for you from our database of 20+ Indian credit cards...
+
+This will help you maximize your rewards and benefits!`
+        };
+
+      default:
+        return { content: 'Thank you for that information!' };
     }
   };
 
-  const generateRuleBasedResponse = (userInput: string, conversationHistory: Message[]): string => {
-    const input = userInput.toLowerCase();
-    const conversationText = conversationHistory.map(m => m.content.toLowerCase()).join(' ');
+  const generateRecommendations = async (profile: UserProfile) => {
+    try {
+      // Save user profile to database only if authenticated
+      if (user) {
+        await supabase
+          .from('user_profiles')
+          .upsert({
+            user_id: user.id,
+            monthly_income: profile.monthlyIncome,
+            spending_habits: profile.spendingHabits,
+            preferred_benefits: profile.preferredBenefits,
+            credit_score: profile.creditScore
+          });
+      }
 
-    // Check what information we already have
-    const hasIncome = conversationText.includes('income') || conversationText.includes('salary');
-    const hasSpending = conversationText.includes('spending') || conversationText.includes('fuel') || conversationText.includes('groceries');
-    const hasBenefits = conversationText.includes('benefits') || conversationText.includes('cashback') || conversationText.includes('points');
+      const recs = recommendationEngine.generateRecommendations(profile);
+      setRecommendations(recs);
+      setShowRecommendations(true);
 
-    // Income question
-    if (!hasIncome && (input.includes('income') || input.match(/\d+/))) {
-      return `Thank you for sharing your income information! That helps me understand your eligibility for different cards.
+      // Update session status only if authenticated
+      if (sessionId && user) {
+        await supabase
+          .from('chat_sessions')
+          .update({ status: 'completed' })
+          .eq('id', sessionId);
+      }
 
-Now, let's talk about your spending habits. This will help me recommend cards with the best rewards for your lifestyle.
-
-How much do you typically spend on fuel per month? (e.g., "around 3,000" or "I don't drive much")`;
+    } catch (error) {
+      console.error('Error generating recommendations:', error);
+      generateDefaultRecommendations();
     }
-
-    // Spending questions
-    if (!hasSpending && (input.includes('fuel') || input.includes('petrol') || input.includes('gas'))) {
-      return `Got it! Fuel spending is important for reward calculations.
-
-What about groceries and daily shopping? How much do you spend monthly on groceries, supermarkets, or local stores?`;
-    }
-
-    if (input.includes('groceries') || input.includes('shopping') || input.includes('store')) {
-      return `Perfect! Now I'm getting a good picture of your spending pattern.
-
-Do you frequently dine out or order food online? What's your approximate monthly spending on restaurants, food delivery, or dining?`;
-    }
-
-    if (input.includes('dining') || input.includes('food') || input.includes('restaurant')) {
-      return `Excellent! One more spending category - do you do much online shopping? This includes e-commerce sites like Amazon, Flipkart, or any online purchases.
-
-What's your typical monthly online shopping amount?`;
-    }
-
-    // Benefits question
-    if (!hasBenefits && (input.includes('online') || input.includes('amazon') || input.includes('flipkart'))) {
-      return `Great! Now I have a good understanding of your spending habits.
-
-What type of benefits matter most to you? Please choose from:
-- Cashback on purchases
-- Travel points/miles
-- Airport lounge access
-- Movie ticket discounts
-- Fuel surcharge waivers
-- Dining discounts
-
-You can mention multiple preferences!`;
-    }
-
-    // Final question - credit score
-    if (hasBenefits && (input.includes('cashback') || input.includes('points') || input.includes('lounge') || input.includes('movie') || input.includes('fuel') || input.includes('dining'))) {
-      return `Perfect! I now have all the information I need about your preferences.
-
-One last question - what's your approximate credit score range?
-- Excellent (750+)
-- Good (650-750) 
-- Fair (600-650)
-- I'm not sure
-
-Based on all this information, I'll be ready to provide personalized recommendations that match your profile perfectly!`;
-    }
-
-    // Ready for recommendations
-    if (input.includes('excellent') || input.includes('good') || input.includes('fair') || input.includes('not sure') || input.includes('don\'t know')) {
-      return `Wonderful! I now have a complete picture of your financial profile and preferences.
-
-Based on your income, spending habits, preferred benefits, and credit profile, I'm ready to provide personalized credit card recommendations that will maximize your rewards and benefits.
-
-Let me analyze the best matches for you from our database of 20+ Indian credit cards...`;
-    }
-
-    // Default response
-    return `Thank you for that information! Could you provide a bit more detail? I want to make sure I give you the most accurate recommendations possible.
-
-If you'd like, you can also tell me about any specific credit card features you're looking for, or any banks you prefer.`;
   };
 
   const generateRecommendationsFromConversation = async (conversationMessages: Message[]) => {
     try {
       // Extract user profile from conversation
-      const userProfile = recommendationEngine.extractUserProfileFromConversation(conversationMessages);
+      const extractedProfile = recommendationEngine.extractUserProfileFromConversation(conversationMessages);
       
       // If profile is too sparse, use defaults
-      if (!userProfile.monthlyIncome) {
-        userProfile.monthlyIncome = 40000; // Default assumption
+      if (!extractedProfile.monthlyIncome) {
+        extractedProfile.monthlyIncome = 40000; // Default assumption
       }
-      if (!userProfile.spendingHabits || Object.keys(userProfile.spendingHabits).length === 0) {
-        userProfile.spendingHabits = {
+      if (!extractedProfile.spendingHabits || Object.keys(extractedProfile.spendingHabits).length === 0) {
+        extractedProfile.spendingHabits = {
           fuel: 3000,
           travel: 2000,
           groceries: 8000,
@@ -391,11 +549,11 @@ If you'd like, you can also tell me about any specific credit card features you'
           utilities: 2000
         };
       }
-      if (!userProfile.preferredBenefits || userProfile.preferredBenefits.length === 0) {
-        userProfile.preferredBenefits = ['Cashback', 'Fuel Benefits'];
+      if (!extractedProfile.preferredBenefits || extractedProfile.preferredBenefits.length === 0) {
+        extractedProfile.preferredBenefits = ['Cashback', 'Fuel Benefits'];
       }
-      if (!userProfile.creditScore) {
-        userProfile.creditScore = 700; // Default assumption
+      if (!extractedProfile.creditScore) {
+        extractedProfile.creditScore = 700; // Default assumption
       }
 
       // Save user profile to database only if authenticated
@@ -404,14 +562,14 @@ If you'd like, you can also tell me about any specific credit card features you'
           .from('user_profiles')
           .upsert({
             user_id: user.id,
-            monthly_income: userProfile.monthlyIncome,
-            spending_habits: userProfile.spendingHabits,
-            preferred_benefits: userProfile.preferredBenefits,
-            credit_score: userProfile.creditScore
+            monthly_income: extractedProfile.monthlyIncome,
+            spending_habits: extractedProfile.spendingHabits,
+            preferred_benefits: extractedProfile.preferredBenefits,
+            credit_score: extractedProfile.creditScore
           });
       }
 
-      const recs = recommendationEngine.generateRecommendations(userProfile);
+      const recs = recommendationEngine.generateRecommendations(extractedProfile);
       setRecommendations(recs);
       setShowRecommendations(true);
 
@@ -455,6 +613,70 @@ If you'd like, you can also tell me about any specific credit card features you'
     }
   };
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputValue.trim() || isTyping) return;
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: inputValue.trim(),
+      timestamp: new Date()
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setInputValue('');
+    setIsTyping(true);
+
+    try {
+      // Save user message to database only if authenticated
+      if (sessionId && user) {
+        await supabase
+          .from('chat_messages')
+          .insert({
+            session_id: sessionId,
+            role: 'user',
+            content: userMessage.content
+          });
+      }
+
+      // For free text input, provide a helpful response
+      const response = "I appreciate your message! For the best experience, please use the option buttons above to answer the questions. This helps me provide more accurate recommendations tailored to your needs.";
+
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: response,
+        timestamp: new Date()
+      };
+
+      setMessages(prev => [...prev, assistantMessage]);
+
+      // Save assistant message to database only if authenticated
+      if (sessionId && user) {
+        await supabase
+          .from('chat_messages')
+          .insert({
+            session_id: sessionId,
+            role: 'assistant',
+            content: response
+          });
+      }
+
+    } catch (error) {
+      console.error('Error sending message:', error);
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: 'I apologize, but I encountered an error. Please try using the option buttons to continue.',
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsTyping(false);
+    }
+  };
+
   const handleNewChat = async () => {
     try {
       // Mark current session as completed only if authenticated
@@ -472,6 +694,8 @@ If you'd like, you can also tell me about any specific credit card features you'
       setRecommendations([]);
       setSelectedCardsForComparison([]);
       setShowComparison(false);
+      setCurrentStep('greeting');
+      setUserProfile({});
 
       // Initialize new chat
       await initializeChat();
@@ -538,7 +762,7 @@ If you'd like, you can also tell me about any specific credit card features you'
                     {!openaiAvailable && (
                       <span className="inline-flex items-center gap-1 bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full text-xs">
                         <AlertCircle className="w-3 h-3" />
-                        Fallback Mode
+                        Guided Mode
                       </span>
                     )}
                   </p>
@@ -571,6 +795,24 @@ If you'd like, you can also tell me about any specific credit card features you'
                         }`}
                       >
                         <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+                        
+                        {message.options && message.options.length > 0 && (
+                          <div className="mt-3 space-y-2">
+                            {message.options.map((option, index) => (
+                              <motion.button
+                                key={index}
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: index * 0.1 }}
+                                onClick={() => handleOptionClick(option)}
+                                className="block w-full text-left px-3 py-2 text-sm bg-gray-50 hover:bg-blue-50 rounded-lg transition-colors border border-gray-200 hover:border-blue-300"
+                                disabled={isTyping}
+                              >
+                                {option}
+                              </motion.button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </motion.div>
                   ))}
@@ -603,7 +845,7 @@ If you'd like, you can also tell me about any specific credit card features you'
                     type="text"
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
-                    placeholder="Type your message..."
+                    placeholder="Type your message or use the buttons above..."
                     className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     disabled={isTyping}
                   />
