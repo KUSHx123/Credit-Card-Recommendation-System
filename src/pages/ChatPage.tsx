@@ -58,7 +58,7 @@ export const ChatPage: React.FC = () => {
         .select('*')
         .eq('user_id', user.id)
         .eq('status', 'active')
-        .single();
+        .maybeSingle();
 
       let currentSessionId: string;
 

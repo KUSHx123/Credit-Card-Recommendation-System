@@ -56,7 +56,7 @@ export class OpenAIAssistant {
 5. Always be encouraging and explain how the information will help provide better recommendations.
 
 Start by greeting the user warmly and asking about their monthly income in a friendly way.`,
-        model: "gpt-4-1106-preview",
+        model: "gpt-4o",
         tools: []
       });
 
