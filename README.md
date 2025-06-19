@@ -92,7 +92,7 @@ The application will be available at `http://localhost:5173`
 
 **Deployed Link**: [CardAdvisor AI](https://credit-card-recommendation-system.vercel.app/)
 
-Video link: [LINK](https://animoto.com/play/pMlQaAJ4YIi14PTUtTK53Q)
+Video link: [LINK](https://animoto.com/play/BpmYHiiZhPQVe1vCB8a36Q)
 
 ## 🏗️ Project Structure
 
